@@ -1,0 +1,25 @@
+repeat_species	arabidopsis
+picard_dir	/path/to/picard-tools-1.114
+gatk_dir	/path/to/GATK3-2-2
+snpeff_dir	/path/to/snpEff
+snpeff_cfg	/path/to/snpEff/snpEff.config
+snpeff_species	athalianaTair10R23
+genome	/path/to/snpEff/data/athalianaTair10R23/sequences.fa
+genome_name	TAIR10
+genome_date	20140808
+known_gene	/path/to/snpEff/data/athalianaTair10R23/genes.gtf
+known_snp	/path/to/arabidopsis_thaliana.vcf
+gene_description	/path/to/TAIR10_functional_descriptions_20130831.txt
+chrom_order	1,2,3,4,5,Mt,Pt
+
+read1	/path/to/read-0_1.fastq
+read2	/path/to/read-0_2.fastq
+insert_size	300
+
+read1	/path/to/read-1_1.fastq
+read2	/path/to/read-1_2.fastq
+insert_size	300
+
+read1	/path/to/read-2_1.fastq
+read2	/path/to/read-2_2.fastq
+insert_size	300

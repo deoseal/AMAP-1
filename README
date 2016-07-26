@@ -1,0 +1,304 @@
+README for Automated Mutation Analysis Pipeline (AMAP) ver. 1.0.
+
+Authors: Kotaro Ishii (kotaro@riken.jp),
+	 Yusuke Kazama (ykaze@riken.jp),
+	 Tomonari Hirano,
+	 Michiaki Hamada,
+	 Yukiteru Ono,
+	 and Tomoko Abe
+Date:	25/11/2015
+
+(1) INTRODUCTION
+AMAP is a pipeline written in PERL for detecting mutations and reducing false positives from input files. 
+
+AMAP automatically maps reads to the reference sequence, removes PCR duplicates, performs realignment, and detects mutations by using five software programs. Each software generates one output file per mutant. AMAP integrates the output files into a single result file. In this file, the mutation candidates common to at least two mutants and those located within 10 bp around repetitive sequences are flagged as false positives. Users can choose the option of filtering these flags using spreadsheet software.
+
+(2) REQUIRED SYSTEMS
+AMAP requires that the following software programs are executable after the path setting. The version numbers indicate those that are confirmed to be suitable for AMAP.
+- SAMtools (ver. 0.1.19, http://www.htslib.org/)
+- BWA (ver. 0.6.2, http://bio-bwa.sourceforge.net/)
+- Picard (ver. 1.114, http://broadinstitute.github.io/picard/)
+- RepeatMasker (ver. 4.0.5, http://www.repeatmasker.org/)
+- RMBlast (ver. 2.2.28, http://www.repeatmasker.org/RMBlast.html) and TRF (ver. 4.07b, http://tandem.bu.edu/trf/trf.html) are also required for RepeatMasker.
+- SnpEff (ver. 3.6c, http://snpeff.sourceforge.net/)
+- GATK (ver. 3.2.2, https://www.broadinstitute.org/gatk/)
+- Pindel (ver. 0.2.4t, http://gmt.genome.wustl.edu/packages/pindel/)
+- CNVnator (ver. 0.3, http://sv.gersteinlab.org/cnvnator/)
+- ROOT package (http://root.cern.ch) is also required for CNVnator.
+- BreakDancer (ver. 1.4.5, http://gmt.genome.wustl.edu/packages/breakdancer/)
+
+AMAP requires the following datasets. AMAP was developed using the datasets of Arabidopsis thaliana, version TAIR10, release 23, that are available at EnsemblPlants (http://plants.ensembl.org/).
+- The Genomic DNA sequence file (in FASTA format, "Arabidopsis_thaliana.TAIR10.23.dna.toplevel.fa")
+The headers in the file must be modified to not include blank or special characters (good examples: ">1", ">Mt", ">Pt").
+- Gene set files (in GTF format, "Arabidopsis_thaliana.TAIR10.23.gtf")
+- Variation data files (in VCF format, "arabidopsis_thaliana.vcf")
+
+AMAP also requires gene description files. That of A. thaliana is available at TAIR ("https://www.arabidopsis.org/download_files/Genes/TAIR10_genome_release/TAIR10_functional_descriptions").
+
+After downloading, some preparations are necessary for SnpEff:
+(a) Editing the config file "snpEff.config" in the same directory as the executable file of SnpEff
+The variable "data_dir" is to be changed depending on the user environment. An entry for "Databases & Genomes" section is to be added. If the name of the new entry is "Arabidopsis_thaliana_TAIR10R23" (user-settable), the entry should be:
+    Arabidopsis_thaliana_TAIR10R23.genome : Arabidopsis_Thaliana
+    Arabidopsis_thaliana_TAIR10R23.M.codonTable : Standard
+
+(b) Preparation of data files
+A directory named "Arabidopsis_thaliana_TAIR10R23" (same as (a)) is to be created under the "data_dir" directory. The genomic DNA sequence file and the gene sets file are renamed as "sequences.fa" and "genes.gtf," respectively and are to be located in the created directory.
+
+(c) Database building
+A command to make a database is executed.
+Syntax:
+    java -Xmx1g -jar snpEff.jar build -gtf22 -v Arabodopsis_thaliana_TAIR10R23
+
+(3) CONFIGURATION
+AMAP requires a configuration file in tab-delimited text format when executed. Each row consists of a key, a tab, and a value of the key. An example of the configuration file for an analysis of three mutants is like this:
+
+repeat_species	arabidopsis
+picard_dir	/path/to/picard-tools-1.114
+gatk_dir	/path/to/GATK3-2-2
+snpeff_dir	/path/to/snpEff
+snpeff_cfg	/path/to/snpEff/snpEff.config
+snpeff_species	athalianaTair10R23
+genome	/path/to/snpEff/data/athalianaTair10R23/sequences.fa
+genome_name	TAIR10
+genome_date	20140808
+known_gene	/path/to/snpEff/data/athalianaTair10R23/genes.gtf
+known_snp	/path/to/arabidopsis_thaliana.vcf
+gene_description	/path/to/TAIR10_functional_descriptions_20130831.txt
+chrom_order	1,2,3,4,5,Mt,Pt
+
+read1	/path/to/read-0_1.fastq
+read2	/path/to/read-0_2.fastq
+insert_size	300
+
+read1	/path/to/read-1_1.fastq
+read2	/path/to/read-1_2.fastq
+insert_size	300
+
+read1	/path/to/read-2_1.fastq
+read2	/path/to/read-2_2.fastq
+insert_size	300
+
+The "repeat_species" key indicates the species used in the "-species" option in RepeatMasker.
+The keys "picard_dir," "gatk_dir," and "snpeff_dir" indicate the directories in which the respective executable files of Picard, GATK, and SnpEff are located.
+The "snpeff_species" key indicates the name of the entry in "snpEff.config" that was set by the user.
+The keys "genome," "known_gene," "known_snp," "gene_description" indicate the location of the genomic DNA sequence file, the gene sets file, the variation data file, and the gene description file, respectively.
+The "chrom_order" key indicates the comma-separated header names defined in the genomic DNA sequence file.
+The sets of keys "read1," "read2," and "insert_size" indicate the names of a pair of Illumina read files and the insert size of the reads used in the config file for Pindel. Each set is separated by a blank row.
+
+(4) USAGE
+Syntax:
+    perl AMAP.pl config_file_name
+
+The directory containing all component files of AMAP must be added to the PATH environment variable.
+
+(5) OUTPUT FILES
+AMAP generates outputs as five main result files.
+
+(a) snv.list
+The file "snv.list" in a tab-delimited text format contains the mutation candidates detected by SAMtools. The file consists of the following columns:
+1. Chr
+2. Position
+3. Reference
+4. Change
+5. Change_type
+6. Effect
+7. Transcript_ID
+8. Gene_ID
+9. Gene_name
+10. Bio_type
+11. CDS_size
+12. Description
+13. Exon_ID
+14. Exon_rnk
+15. Old_AA/New_AA
+16. Old_codon/New_codon
+17. Codon_num(CDS)
+18. Codon_degeneracy
+19. Codons_around
+20. AAs_around
+21. Matching_repeat1
+22. Matching_repeat2
+23. Repeat_filtered
+24. Consensus
+25. IGVlink
+26. Homozygous
+27. Quality
+28. Coverage
+29. Custom_interval_ID
+30. MappingQual
+31. HighQualBaseRef
+32. HighQualBaseAlt
+33. Filtered
+
+Columns 1 and 2 indicate the location of the mutation candidate, which corresponds to columns 1 (Chromo) and 2 (Position), respectively, of the SnpEff output with an option "-o txt".
+Columns 3-11 contain information about the gene affected by the mutation candidate corresponding to columns 3 (Reference), 4 (Change), 5 (Change_type), 16 (Effect), 13 (Transcript_ID), 10 (Gene_ID), 11 (Gene_name), 12 (Bio_type), and 21 (CDS_size), respectively, of the SnpEff output with an option "-o txt".
+Column 12 is a description of the gene or transcript affected by the mutation candidate, derived from the "gene_description" input file.
+Columns 13-20 contain information about the gene affected by the mutation candidate corresponding to the columns 14 (Exon_ID), 15 (Exon_rank), 17 (Old_AA/New_AA), 18 (Old_codon/New_codon), 19 (Codon_num(CDS)), 20 (Codon_degeneracy), 22 (Codons_around), and 23 (AAs_around), respectively of the SnpEff output with an option "-o txt".
+Columns 21 and 22 are repetitive sequences within a range of 10 bp from the mutation candidates. A repetitive sequence in column 21 is detected by RepeatMasker without the "-div" option and the one in column 22 is detected with an option "-div 0.0."
+Column 23 is a flag of repetitive sequence. The flag is set as "Filtered" if a "Simple_repeat" exists in column 22, is longer than 9 bp and its repeating unit repeats more than four times; otherwise, it is set as "Not_Filtered."
+Column 24 is a flag of consensus mutation candidates. The flag is set as "common" if all sequenced samples have the mutation candidate in common, and it is set as "part_common" if at least two sequenced samples have the mutation candidate in common; otherwise, it is set as "not_common." This flag is used to reduce false positives due to polymorphisms.
+Column 25 is a link for Integrative Genomics Viewer (IGV). This enables the user to check the mutation candidate visually when the BAM files of sequenced samples (read-n.recal.bam) are opened in IGV.
+
+Columns 26-33 contain information of mutation candidates in one sequenced sample. These 8 columns are repeated as many times as the number of input sequenced samples.
+
+Columns 26-29 contain information about the mutation candidate corresponding to columns 6 (Homozygous), 7 (Quality), 8 (Coverage), and 24 (Custom_interval_ID), respectively, of the SnpEff output with an option "-o txt".
+Column 30 is an RMS mapping quality in the MQ sub-field of the INFO field in the VCF (v4.1) format file output by SAMtools.
+Column 31 is a read number with the same bases as the reference sequence with high quality, which is a sum of the first and second numbers in the DP4 sub-field in the INFO field in the VCF format file output by SAMtools.
+Column 32 is a read number with bases different (mutated) from the reference sequence and with high quality, which is a sum of the third and fourth numbers in the DP4 sub-field in the INFO field in the VCF format file output by SAMtools.
+Column 33 is a flag of sequence coverage. The flag is set as "Filtered" if the mutation candidate is filtered by SAMtools (vcfutils.pl var Filter -p -d 5 -D 1000); otherwise, it is set as "Not_Filtered."
+
+(b) snv-gatk.list
+The file "snv-gatk.list" in a tab-delimited text format contains the mutation candidates detected by GATK. The file consists of the following columns:
+1. Chr
+2. Position
+3. Reference
+4. Change
+5. Change_type
+6. Effect
+7. Transcript_ID
+8. Gene_ID
+9. Gene_name
+10. Bio_type
+11. CDS_size
+12. Description
+13. Exon_ID
+14. Exon_rank
+15. Old_AA/New_AA
+16. Old_codon/New_codon
+17. Codon_num(CDS)
+18. Codon_degeneracy
+19. Codons_around
+20. AAs_around
+21. Matching_repeat1
+22. Matching_repeat2
+23. Repeat_filtered
+24. Consensus
+25. IGVlink
+26. Homozygous
+27. Quality
+28. Coverage
+29. Custom_interval_ID
+30. MappingQual
+(31. HighQualBaseRef)
+(32. HighQualBaseAlt)
+33. Filtered
+
+Columns 1-29 are as same as columns 1-29 of the result for SAMtools.
+
+Columns 26-33 contain the information of the mutation candidates in one sequenced sample. These 8 columns are repeated as many times as the number of input sequenced samples.
+
+Column 30 is an RMS mapping quality in the MQ sub-field of the INFO field in the VCF format file output by GATK.
+Columns 31-32 are not used.
+Column 33 is a flag of sequence coverage and filtration of GATK. The flag is set as "Filtered" if the value of coverage is not between 5 and 1000 or if the mutation candidate does not pass the filtration by GATK ("QUAL < 30.0 or QD < 5.0" for SNPs and "QUAL < 10.0" for INDELs); otherwise, it is set as "Not_Filtered."
+
+(c) pindel.list
+The file "bd.list" in a tab-delimited text format contains the mutation candidates detected by Pindel. The file consists of the following columns:
+1. Chr1
+2. Pos1
+3. Chr2
+4. Pos2
+5. Sv_type
+6. Sv_size
+7. Annot1
+8. Annot2
+9. Consensus
+(10. Cluster)
+(11. Cluster_consensus)
+12. IGV_link1
+13. IGV_link2
+14. Score
+15. Read_num
+16. Depth
+17. Ratio
+18. Filter
+
+Columns 1-6 correspond to columns 8 (the identifier of the chromosome the read was found on), 10 (the start position of the SV), 8, 11 (the end position of the SV), 2 (the type of indel/SV), and 3 (the length of the SV) in the header line of the Pindel output, respectively.
+Columns 7 and 8 contain information about the genes affected by the mutation candidates at the start (indicated by columns 1 and 2) and the end position (indicated by columns 3 and 4), respectively.
+Column 9 is a flag of the consensus mutation candidate. The flag is set as "common" if all sequenced samples have the mutation candidate in common, and is set as "part_common" if at least two sequenced samples have the mutation candidate in common; otherwise, the flag is set as "not_common." This flag is used to reduce false positives due to polymorphisms.
+
+Columns 10 and 11 were not used in our analysis (Ishii et al. 2016). Just for information:
+Column 10 is the number of a cluster to which the mutation candidate belongs. Mutation candidates that have the same "SV_type" and whose regions overlap by more than 79% of the total region are treated as belonging to the same cluster. A mutation candidate whose "SV_type" is "CTX" is not clustered (in a cluster consisting of one mutation candidate).
+Column 11 is a flag of the consensus mutation candidate. The flag is set as "common" if all sequenced samples commonly have the mutation candidate in the same cluster, and is set as "part_common" if at least two sequenced samples commonly have the mutation candidate in the same cluster; otherwise, it is set as "not_common."
+
+Columns 12 and 13 include links of the start and the end position of the mutation candidate for IGV, respectively. This enables the user to check the mutation candidate visually when the BAM files of the sequenced samples (read-n.recal.bam) are open in IGV.
+
+Column 14-18 contain the information of mutation candidates in one sequenced sample. These 5 columns are repeated as many times as the number of input sequenced samples.
+
+Column 14 and 15 correspond to columns 27 (sum of mapping qualities of anchor reads) and 16 (the number of unique reads supporting the SV) in the header line of the result of Pindel, respectively.
+Column 16 is an average depth of both terminal bases from the region of the mutation candidate.
+Column 17 is a ratio of the total number of supporting read pairs to the average depth, which is calculated as "Column 15 / Column 16."
+Column 18 is a flag of the depth and the number of supporting read pair. The flag is set as "filtered" if the depth is less than five or more than 1000 or if the value of column 17 is less than 0.1; otherwise, it is set as "not_filtered."
+
+(d) bd.list
+The file "bd.list" in a tab-delimited text format contains the mutation candidates detected by BreakDancer. The file consists of the following columns:
+1. Chr1
+2. Pos1
+3. Chr2
+4. Pos2
+5. SV_type
+6. SV_size
+7. Annot1
+8. Annot2
+9. Consensus
+(10. Cluster)
+(11. Cluster_consensus)
+12. IGV_link1
+13. IGV_link2
+14. Orient1
+15. Orient2
+16. Score
+17. Read_num
+18. Depth
+19. Ratio
+20. Filter
+
+Columns 1-6 correspond to columns 1 (Chromosome 1), 2 (Position 1), 4 (Chromosome 2), 5 (Position 2), 7 (Type of a SV), and 8 (Size of a SV), respectively, of the BreakDancer output.
+Columns 7-13 are as the same as columns 7-13, respectively, of the "pindel.list".
+
+Columns 14-20 include the information of mutation candidates in one sequenced sample. These 7 columns are repeated as many times as the number of input sequenced samples.
+
+Columns 14-17 contain information about the mutation candidate extracted from the results of BreakDancer, which correspond to the columns 3 (Orientation 1), 6 (Orientation 2), 9 (Confidence Score), and 10 (Total number of supporting read pairs), respectively, in the BreakDancer output.
+Column 18 is an average depth of the both terminal bases from the region of the mutation candidate.
+Column 19 is a ratio of the total number of supporting read pair to the average depth, which is calculated as "Column 17 / Column 18."
+Column 20 is a flag of the depth and the number of supporting read pair. The flag is set as "filtered" if the depth is less than five or more than 1000 or if the value of column 19 is less than 0.1; otherwise, it is set as "not_filtered."
+
+(e) cnv.list
+The file "cnv.list" in a tab-delimited text format contains mutation candidates detected by CNVnator. The file consists of the following columns:
+1. Chr1
+2. Pos1
+3. Chr2
+4. Pos2
+5. SV_type
+6. SV_size
+7. Annot1
+8. Annot2
+9. Consensus
+(10. Cluster)
+(11. Cluster_consensus)
+12. IGV_link1
+13. IGV_link2
+14. Normalized_RD
+15. p-val1
+16. p-val2
+17. cn1
+18. cn2
+19. Depth
+20. Filter
+
+Columns 1-4 are the start and end positions of the mutation candidate corresponding to column 2 (coordinates) of the CNVnator output with the "call" command.
+Columns 5 and 6 are the type and the size of the SV corresponding to columns 1 (CNV_type) and 3 (CNV_size) of the CNVnator output with the "call" command.
+Columns 7-13 are the same as columns 7-13, respectively, of the "pindel.list".
+Columns 14-16 correspond to columns 4 (normalized_RD), 5 (e-val1), and 6 (e-val2) of the CNVnator output with the CNV "call" command.
+Columns 17 and 18 correspond to columns 4 (number of copies) and 5 (number of copies for low coverage samples) with the "genotype" command.
+Column 19 is an average depth of both terminal bases of the region of the mutation candidate.
+Column 20 is a flag of the depth. The flag is set as "filtered" if the depth is less than five or more than 1000; otherwise, it is set as "not_filtered."
+
+(5) LICENSE 
+Copyright (c) 2015 Kotaro Ishii, Yusuke Kazama, Tomonari Hirano, Michiaki Hamada, Yukiteru Ono, and Tomoko Abe.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
